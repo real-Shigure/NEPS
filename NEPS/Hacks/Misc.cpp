@@ -77,8 +77,7 @@ void Misc::slowwalk(UserCmd *cmd) noexcept
 		const auto negatedDirection = Vector::fromAngle2D(direction) * -450;
 		cmd->forwardmove = negatedDirection.x;
 		cmd->sidemove = negatedDirection.y;
-	}
-	else if (cmd->forwardmove && cmd->sidemove)
+	} else if (cmd->forwardmove && cmd->sidemove)
 	{
 		const float maxSpeedRoot = maxSpeed * static_cast<float>(M_SQRT1_2);
 		cmd->forwardmove = cmd->forwardmove < 0.0f ? -maxSpeedRoot : maxSpeedRoot;
@@ -89,6 +88,108 @@ void Misc::slowwalk(UserCmd *cmd) noexcept
 	} else if (cmd->sidemove)
 	{
 		cmd->sidemove = cmd->sidemove < 0.0f ? -maxSpeed : maxSpeed;
+	}
+}
+
+static Vector autoPeekStartPos;
+static bool autoPeekReturning = false;
+
+void Misc::autoPeek(UserCmd *cmd) noexcept
+{
+	if (!localPlayer || !localPlayer->isAlive())
+		return;
+
+	if (localPlayer->moveType() == MoveType::Noclip || localPlayer->moveType() == MoveType::Ladder || ~localPlayer->flags() & PlayerFlag_OnGround)
+		return;
+
+	if (static Helpers::KeyBindState flag; !flag[config->movement.autoPeek.bind])
+	{
+		autoPeekReturning = false;
+		autoPeekStartPos = Vector{};
+		return;
+	}
+
+	if (!autoPeekStartPos.notNull())
+		autoPeekStartPos = localPlayer->getAbsOrigin();
+
+	if (Helpers::attacking(cmd->buttons & UserCmd::Button_Attack, cmd->buttons & UserCmd::Button_Attack2))
+		autoPeekReturning = true;
+
+	if (autoPeekReturning)
+	{
+		const float yaw = cmd->viewangles.y;
+		const auto delta = autoPeekStartPos - localPlayer->getAbsOrigin();
+
+		if (delta.length2D() > 5.0f)
+		{
+			Vector fwd = Vector::fromAngle2D(cmd->viewangles.y);
+			Vector side = fwd.crossProduct(Vector::up());
+			Vector move = Vector{fwd.dotProduct2D(delta), side.dotProduct2D(delta), 0.0f};
+			move *= 45.0f;
+
+			const float l = move.length2D();
+			if (l > 450.0f)
+				move *= 450.0f / l;
+
+			cmd->forwardmove = move.x;
+			cmd->sidemove = move.y;
+		} else
+			autoPeekReturning = false;
+	}
+}
+
+void Misc::visualizeQuickPeek(ImDrawList *drawList) noexcept
+{
+	if (static Helpers::KeyBindState flag; !flag[config->movement.autoPeek.bind])
+		return;
+
+	if (autoPeekReturning ? !config->movement.autoPeek.visualizeActive.enabled : !config->movement.autoPeek.visualizeIdle.enabled)
+		return;
+
+	if (!localPlayer || !localPlayer->isAlive())
+		return;
+
+	if (autoPeekStartPos.notNull())
+	{
+		static const auto circumference = []
+		{
+			std::array<Vector, 32> points;
+			for (std::size_t i = 0; i < points.size(); ++i)
+			{
+				constexpr auto radius = 25.0f;
+				points[i] = Vector{radius * std::cos(Helpers::degreesToRadians(i * (360.0f / points.size()))),
+					radius * std::sin(Helpers::degreesToRadians(i * (360.0f / points.size()))),
+					0.0f};
+			}
+			return points;
+		}();
+
+		std::array<ImVec2, circumference.size()> screenPoints;
+		std::size_t count = 0;
+
+		for (const auto &point : circumference)
+		{
+			if (Helpers::worldToScreen(autoPeekStartPos + point, screenPoints[count]))
+				++count;
+		}
+
+		if (count < 1)
+			return;
+
+		std::swap(screenPoints[0], *std::min_element(screenPoints.begin(), screenPoints.begin() + count, [](const auto &a, const auto &b) { return a.y < b.y || (a.y == b.y && a.x < b.x); }));
+
+		constexpr auto orientation = [](const ImVec2 &a, const ImVec2 &b, const ImVec2 &c)
+		{
+			return (b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y);
+		};
+		std::sort(screenPoints.begin() + 1, screenPoints.begin() + count, [&](const auto &a, const auto &b) { return orientation(screenPoints[0], a, b) > 0.0f; });
+
+		const auto color = Helpers::calculateColor(autoPeekReturning ? config->movement.autoPeek.visualizeActive : config->movement.autoPeek.visualizeIdle);
+		const auto color2 = Helpers::calculateColor(Color3(autoPeekReturning ? config->movement.autoPeek.visualizeActive : config->movement.autoPeek.visualizeIdle));
+
+		drawList->AddConvexPolyFilled(screenPoints.data(), count, color);
+		if (config->visuals.smokeHull.color[3] != 1.0f)
+			drawList->AddPolyline(screenPoints.data(), count, color2, true, config->visuals.smokeHull.thickness);
 	}
 }
 
@@ -221,7 +322,7 @@ void Misc::recoilCrosshair(ImDrawList *drawList) noexcept
 
 	GameData::Lock lock;
 	const auto &local = GameData::local();
-	
+
 	if (!local.exists || !local.alive)
 		return;
 
@@ -234,9 +335,9 @@ void Misc::recoilCrosshair(ImDrawList *drawList) noexcept
 	}
 }
 
-void Misc::visualizeInaccuracy(ImDrawList *drawList) noexcept
+void Misc::visualizeAccuracy(ImDrawList *drawList) noexcept
 {
-	if (!config->visuals.inaccuracyCircle.enabled)
+	if (!config->visuals.accuracyCircle.enabled)
 		return;
 
 	GameData::Lock lock;
@@ -253,9 +354,9 @@ void Misc::visualizeInaccuracy(ImDrawList *drawList) noexcept
 		if (radius > displaySize.x || radius > displaySize.y)
 			return;
 
-		const auto color = Helpers::calculateColor(config->visuals.inaccuracyCircle);
+		const auto color = Helpers::calculateColor(config->visuals.accuracyCircle);
 		drawList->AddCircleFilled(displaySize / 2, radius, color);
-		if (config->visuals.inaccuracyCircle.outline)
+		if (config->visuals.accuracyCircle.outline)
 			drawList->AddCircle(displaySize / 2, radius, color | IM_COL32_A_MASK);
 	}
 }
@@ -266,7 +367,7 @@ void Misc::prepareRevolver(UserCmd *cmd) noexcept
 		return;
 
 	if (!localPlayer) return;
-	
+
 	if (cmd->buttons & UserCmd::Button_Attack)
 		return;
 
@@ -480,7 +581,7 @@ void Misc::bunnyHop(UserCmd *cmd) noexcept
 void Misc::fakeBan() noexcept
 {
 	if (interfaces->engine->isInGame())
-		interfaces->engine->clientCmdUnrestricted(("playerchatwheel . \"Cheer! \xe2\x80\xa8" + std::string{static_cast<char>(config->griefing.banColor + 1)} + config->griefing.banText + "\"").c_str());
+		interfaces->engine->clientCmdUnrestricted(("playerchatwheel . \"Cheer! \xE2\x80\xA8" + std::string{static_cast<char>(config->griefing.banColor + 1)} + config->griefing.banText + "\"").c_str());
 }
 
 void Misc::changeConVarsTick() noexcept
@@ -1028,8 +1129,14 @@ void Misc::blockBot(UserCmd *cmd, const Vector &currentViewAngles) noexcept
 	if (!localPlayer || !localPlayer->isAlive())
 		return;
 
-	float best = 255.0f;
-	if (static Helpers::KeyBindState flag; flag[config->griefing.blockbot.target])
+	if (static Helpers::KeyBindState flag; !flag[config->griefing.blockbot.bind])
+	{
+		blockTargetHandle = 0;
+		return;
+	}
+
+	float best = 1024.0f;
+	if (!blockTargetHandle)
 	{
 		for (int i = 1; i <= interfaces->engine->getMaxClients(); i++)
 		{
@@ -1038,18 +1145,14 @@ void Misc::blockBot(UserCmd *cmd, const Vector &currentViewAngles) noexcept
 			if (!entity || !entity->isPlayer() || entity == localPlayer.get() || entity->isDormant() || !entity->isAlive())
 				continue;
 
-			const auto angle = Helpers::calculateRelativeAngle(localPlayer->getEyePosition(), entity->getEyePosition(), currentViewAngles);
-			const auto fov = std::hypot(angle.x, angle.y);
-
-			if (fov < best)
+			const auto distance = entity->getAbsOrigin().distTo(localPlayer->getAbsOrigin());
+			if (distance < best)
 			{
-				best = fov;
+				best = distance;
 				blockTargetHandle = entity->handle();
 			}
 		}
 	}
-
-	if (static Helpers::KeyBindState flag; !flag[config->griefing.blockbot.bind]) return;
 
 	const auto target = interfaces->entityList->getEntityFromHandle(blockTargetHandle);
 	if (target && target->isPlayer() && target != localPlayer.get() && !target->isDormant() && target->isAlive())
@@ -1173,7 +1276,7 @@ void Misc::indicators() noexcept
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowTitleAlign, {0.5f, 0.5f});
 	ImGui::Begin("Indicators", nullptr, windowFlags);
 	ImGui::PopStyleVar();
-	
+
 	if (!local.exists)
 	{
 		ImGui::TextWrapped("Shows things like choked packets, height, speed and shot statistics");
@@ -1460,7 +1563,9 @@ void Misc::teamDamageList(GameEvent *event)
 				ImGui::Text("%s -> %idmg %i%s", player->name.c_str(), info.first, info.second, info.second == 1 ? "kill" : "kills");
 			else if (GameData::local().handle == handle)
 				ImGui::TextColored({1.0f, 0.7f, 0.2f, 1.0f}, "YOU -> %idmg %i%s", info.first, info.second, info.second == 1 ? "kill" : "kills");
-
+			else
+				continue;
+			
 			if (config->misc.teamDamageList.progressBars)
 			{
 				ImGuiCustom::progressBarFullWidth(static_cast<float>(info.first) / 300);
@@ -1805,7 +1910,7 @@ void Misc::onVoteChange(UserMessageType type, const void *data, int size) noexce
 
 		memory->clientMode->getHudChat()->printf(0, " \x1[NEPS]\x8 %s started a vote for\x1 %s", isLocal ? "\x10YOU\x8" : entity->getPlayerName().c_str(), voteName(voteType));
 	}
-		break;
+	break;
 	case UserMessageType::VotePass:
 		memory->clientMode->getHudChat()->printf(0, " \x1[NEPS]\x8 Vote\x4 PASSED\x1");
 		break;
@@ -1824,21 +1929,26 @@ void Misc::forceRelayCluster() noexcept
 	*memory->relayCluster = dataCentersList[config->misc.forceRelayCluster];
 }
 
-void Misc::runChatSpammer() noexcept
+void Misc::runChatSpammer(unsigned char test) noexcept
 {
-	static float previousTime = memory->globalVars->realTime;
+	static float previousTime = 0.0f;
 	if (memory->globalVars->realTime < previousTime + 0.1f)
 		return;
-	previousTime = memory->globalVars->realTime;
 
 	constexpr auto nuke = "say \xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9\xE2\x80\xA9";
 	constexpr auto basmala = "say \uFDFD \uFDFD \uFDFD \uFDFD \uFDFD \uFDFD \uFDFD \uFDFD \uFDFD \uFDFD \uFDFD \uFDFD \uFDFD \uFDFD \uFDFD \uFDFD \uFDFD \uFDFD \uFDFD \uFDFD \uFDFD \uFDFD \uFDFD \uFDFD \uFDFD \uFDFD \uFDFD \uFDFD \uFDFD \uFDFD";
 
-	if (static Helpers::KeyBindState flag; flag[config->griefing.chatNuke])
+	if (static Helpers::KeyBindState flag; flag[config->griefing.chatNuke] || test == 1)
+	{
 		interfaces->engine->clientCmdUnrestricted(nuke);
+		previousTime = memory->globalVars->realTime;
+	}
 
-	if (static Helpers::KeyBindState flag; flag[config->griefing.chatBasmala])
+	if (static Helpers::KeyBindState flag; flag[config->griefing.chatBasmala] || test == 2)
+	{
 		interfaces->engine->clientCmdUnrestricted(basmala);
+		previousTime = memory->globalVars->realTime;
+	}
 }
 
 void Misc::fakePrime() noexcept
@@ -1849,13 +1959,13 @@ void Misc::fakePrime() noexcept
 	{
 		lastState = config->griefing.fakePrime;
 
-		#ifdef _WIN32
+#ifdef _WIN32
 		if (DWORD oldProtect; VirtualProtect(memory->fakePrime, 4, PAGE_EXECUTE_READWRITE, &oldProtect))
 		{
 			constexpr uint8_t patch[]{0x31, 0xC0, 0x40, 0xC3};
 			std::memcpy(memory->fakePrime, patch, 4);
 			VirtualProtect(memory->fakePrime, 4, oldProtect, nullptr);
 		}
-		#endif
+#endif
 	}
 }

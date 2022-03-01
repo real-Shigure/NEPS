@@ -11,10 +11,12 @@ namespace Misc
 {
 	void edgeJump(UserCmd *cmd) noexcept;
 	void slowwalk(UserCmd *cmd) noexcept;
+	void autoPeek(UserCmd* cmd) noexcept;
+	void visualizeQuickPeek(ImDrawList *drawlist) noexcept;
 	void updateClanTag() noexcept;
 	void overlayCrosshair(ImDrawList *drawlist) noexcept;
 	void recoilCrosshair(ImDrawList *drawList) noexcept;
-	void visualizeInaccuracy(ImDrawList *drawList) noexcept;
+	void visualizeAccuracy(ImDrawList *drawList) noexcept;
 	void prepareRevolver(UserCmd *) noexcept;
 	void fastPlant(UserCmd *) noexcept;
 	void fastStop(UserCmd *) noexcept;
@@ -49,7 +51,7 @@ namespace Misc
 	void onPlayerVote(GameEvent &event) noexcept;
 	void onVoteChange(UserMessageType type, const void *data = nullptr, int size = 0) noexcept;
 	void forceRelayCluster() noexcept;
-	void runChatSpammer() noexcept;
+	void runChatSpammer(unsigned char test = 0) noexcept;
 	void fakePrime() noexcept;
 	void velocityGraph() noexcept;
 	void purchaseList(GameEvent *event = nullptr) noexcept;

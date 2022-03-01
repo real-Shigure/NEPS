@@ -77,6 +77,7 @@ public:
 	};
 	std::array<Aimbot, 40> aimbot;
 
+
 	struct Triggerbot
 	{
 		static Triggerbot &getRelevantConfig() noexcept;
@@ -214,7 +215,7 @@ public:
 		Color4 overlayCrosshair;
 		int overlayCrosshairType = 0;
 		Color4 recoilCrosshair;
-		Color4OutlineToggle inaccuracyCircle = {1.0f, 1.0f, 1.0f, 0.25f};
+		Color4OutlineToggle accuracyCircle = {1.0f, 1.0f, 1.0f, 0.25f};
 		int recoilCrosshairType = 0;
 		int forceCrosshair = 0;
 
@@ -319,7 +320,6 @@ public:
 		KeyBind fakeDuck;
 		int fakeDuckPackets = 0;
 		KeyBind slowwalk;
-		KeyBind fastwalk;
 		bool moonwalk = false;
 		bool antiAfkKick = false;
 		bool fastDuck = false;
@@ -346,10 +346,9 @@ public:
 		struct Blockbot
 		{
 			KeyBind bind;
-			KeyBind target;
 			float trajectoryFac = 1.0f;
 			float distanceFac = 2.0f;
-			Color4ToggleThickness visualize = {1.0f, 0.5f, 0.0f, 1.0f};
+			Color4ToggleThickness visualize = {0.0f, 1.0f, 0.0f, 0.7f};
 		} blockbot;
 
 		struct Reportbot
@@ -372,6 +371,14 @@ public:
 		bool autoStrafe = false;
 		KeyBind edgeJump;
 		bool fastStop = false;
+
+		struct QuickPeek
+		{
+			KeyBind bind;
+			Color4Toggle visualizeIdle = {0.0f, 1.0f, 0.0f, 0.5f};
+			Color4Toggle visualizeActive = {1.0f, 1.0f, 0.0f, 0.5f};
+		} autoPeek;
+
 	} movement;
 
 	struct Misc
@@ -388,7 +395,7 @@ public:
 		bool noExtrapolate = true;
 		bool disableIK = false;
 		bool resolveLby = false;
-		bool unlockInvertory = false;
+		bool unlockInventory = false;
 		bool disablePanoramablur = false;
 
 		struct PreserveKillfeed
@@ -455,7 +462,7 @@ public:
 		bool fixTabletSignal = false;
 		bool nadePredict = false;
 		int forceRelayCluster = 0;
-		bool goFestive = true;
+		bool goFestive = false;
 	} misc;
 
 	void scheduleFontLoad(const std::string &name) noexcept;
