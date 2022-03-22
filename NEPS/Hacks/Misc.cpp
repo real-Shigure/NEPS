@@ -565,19 +565,6 @@ bool Misc::changeName(bool reconnect, const char *newName, float delay) noexcept
 	return false;
 }
 
-void Misc::bunnyHop(UserCmd *cmd) noexcept
-{
-	if (!localPlayer)
-		return;
-
-	static auto wasLastTimeOnGround = localPlayer->flags() & PlayerFlag_OnGround;
-
-	if (config->movement.bunnyHop && !(localPlayer->flags() & PlayerFlag_OnGround) && localPlayer->moveType() != MoveType::Ladder && !wasLastTimeOnGround)
-		cmd->buttons &= ~UserCmd::Button_Jump;
-
-	wasLastTimeOnGround = localPlayer->flags() & PlayerFlag_OnGround;
-}
-
 void Misc::fakeBan() noexcept
 {
 	if (interfaces->engine->isInGame())
@@ -853,8 +840,7 @@ void Misc::autoStrafe(UserCmd *cmd) noexcept
 	if (!localPlayer || localPlayer->moveType() == MoveType::Noclip || localPlayer->moveType() == MoveType::Ladder)
 		return;
 
-	static bool lastHeldJump = cmd->buttons & UserCmd::Button_Jump;
-	if (~cmd->buttons & UserCmd::Button_Jump && !lastHeldJump)
+	if ((EnginePrediction::getFlags() & PlayerFlag_OnGround) && (localPlayer->flags() & PlayerFlag_OnGround))
 		return;
 
 	const float speed = localPlayer->velocity().length2D();
@@ -888,8 +874,19 @@ void Misc::autoStrafe(UserCmd *cmd) noexcept
 		cmd->forwardmove = std::cosf(moveDir) * 450.0f;
 		cmd->sidemove = -std::sinf(moveDir) * 450.0f;
 	}
+}
 
-	lastHeldJump = cmd->buttons & UserCmd::Button_Jump;
+void Misc::bunnyHop(UserCmd *cmd) noexcept
+{
+	if (!localPlayer)
+		return;
+
+	static auto wasLastTimeOnGround = localPlayer->flags() & PlayerFlag_OnGround;
+
+	if (config->movement.bunnyHop && !(localPlayer->flags() & PlayerFlag_OnGround) && localPlayer->moveType() != MoveType::Ladder && !wasLastTimeOnGround)
+		cmd->buttons &= ~UserCmd::Button_Jump;
+
+	wasLastTimeOnGround = localPlayer->flags() & PlayerFlag_OnGround;
 }
 
 void Misc::removeCrouchCooldown(UserCmd *cmd) noexcept
@@ -1544,13 +1541,14 @@ void Misc::teamDamageList(GameEvent *event)
 		if (!gui->open && (damageList.empty() || !interfaces->engine->isInGame()))
 			return;
 
-		ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
+		ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoNav;
 		if (config->misc.teamDamageList.noTitleBar)
 			windowFlags |= ImGuiWindowFlags_NoTitleBar;
 		if (!gui->open)
 			windowFlags |= ImGuiWindowFlags_NoInputs;
 
-		ImGui::SetNextWindowSize({200, 200}, ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowPos(ImVec2{ImGui::GetIO().DisplaySize.x - 200, ImGui::GetIO().DisplaySize.y / 2 - 60}, ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowSizeConstraints({200, 0}, ImVec2{FLT_MAX, FLT_MAX});
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowTitleAlign, {0.5f, 0.5f});
 		ImGui::Begin("Team damage list", nullptr, windowFlags);
 		ImGui::PopStyleVar();
